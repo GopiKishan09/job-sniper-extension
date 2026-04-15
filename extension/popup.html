@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkedIn Job Sniper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" stroke="url(#grad1)" stroke-width="2" fill="none"/>
+          <circle cx="12" cy="12" r="6" stroke="url(#grad1)" stroke-width="1.5" fill="none" opacity="0.6"/>
+          <circle cx="12" cy="12" r="2.5" fill="url(#grad1)"/>
+          <line x1="12" y1="2" x2="12" y2="5" stroke="url(#grad1)" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="12" y1="19" x2="12" y2="22" stroke="url(#grad1)" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="2" y1="12" x2="5" y2="12" stroke="url(#grad1)" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="19" y1="12" x2="22" y2="12" stroke="url(#grad1)" stroke-width="1.5" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="grad1" x1="0" y1="0" x2="24" y2="24">
+              <stop offset="0%" stop-color="#6366f1"/>
+              <stop offset="100%" stop-color="#a855f7"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <div class="header-text">
+        <h1>Job Sniper</h1>
+        <p class="subtitle">LinkedIn Search Enhancer</p>
+      </div>
+    </header>
+
+    <!-- Warning Banner (hidden by default) -->
+    <div id="warning" class="warning hidden">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span>Navigate to a LinkedIn Jobs page to use this extension.</span>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent">
+      <!-- Status Bar -->
+      <div class="status-bar" id="statusBar">
+        <div class="status-dot"></div>
+        <span id="statusText">Ready to snipe</span>
+      </div>
+
+      <!-- Time Filters Section -->
+      <section class="section">
+        <div class="section-header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 7v5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <h2>Time Filters</h2>
+        </div>
+        <div class="filter-grid">
+          <button class="filter-btn" data-value="r60" data-label="1 minute">
+            <span class="filter-time">1</span>
+            <span class="filter-unit">min</span>
+          </button>
+          <button class="filter-btn" data-value="r300" data-label="5 minutes">
+            <span class="filter-time">5</span>
+            <span class="filter-unit">min</span>
+          </button>
+          <button class="filter-btn" data-value="r600" data-label="10 minutes">
+            <span class="filter-time">10</span>
+            <span class="filter-unit">min</span>
+          </button>
+          <button class="filter-btn" data-value="r1800" data-label="30 minutes">
+            <span class="filter-time">30</span>
+            <span class="filter-unit">min</span>
+          </button>
+          <button class="filter-btn wide" data-value="r3600" data-label="1 hour">
+            <span class="filter-time">1</span>
+            <span class="filter-unit">hour</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Toggles Section -->
+      <section class="section">
+        <div class="section-header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <h2>Controls</h2>
+        </div>
+
+        <!-- Auto Refresh Toggle -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Auto Refresh</div>
+            <div class="toggle-desc">Reload every 30 seconds</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autoRefreshToggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- Easy Apply Toggle -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Easy Apply</div>
+            <div class="toggle-desc">Show only Easy Apply jobs</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="easyApplyToggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- Sort by Latest -->
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Sort by Latest</div>
+            <div class="toggle-desc">Most recent jobs first</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="sortLatestToggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Active Filters Summary -->
+      <section class="section active-filters" id="activeFiltersSection">
+        <div class="section-header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <h2>Active Filters</h2>
+        </div>
+        <div id="activeFiltersList" class="active-filters-list">
+          <span class="no-filters">No filters applied</span>
+        </div>
+      </section>
+
+      <!-- Clear All Button -->
+      <button class="clear-btn" id="clearAllBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Clear All Filters
+      </button>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>v1.0</span>
+      <span class="footer-dot">·</span>
+      <span>LinkedIn Job Sniper</span>
+    </footer>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
