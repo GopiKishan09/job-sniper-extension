@@ -1,0 +1,1 @@
+# job-sniper-extension
