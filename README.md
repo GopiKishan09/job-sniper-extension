@@ -21,7 +21,6 @@ Enhance your LinkedIn job search with smart automation tools.
 
 ## 📸 Screenshots
 
-*Add screenshots in /screenshots folder*
 
 ---
 
