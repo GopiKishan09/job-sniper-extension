@@ -21,7 +21,7 @@ Enhance your LinkedIn job search with smart automation tools.
 
 ## 📸 Screenshots
 
-
+![Job Sniper Screenshot](screenshots/job-sniper.png)
 ---
 
 ## 🔐 Permissions Used
