@@ -1,381 +1,420 @@
-// ===== DOM Elements =====
-const elements = {
-  warning: document.getElementById("warning"),
-  mainContent: document.getElementById("mainContent"),
-  statusBar: document.getElementById("statusBar"),
-  statusText: document.getElementById("statusText"),
-  autoRefreshToggle: document.getElementById("autoRefreshToggle"),
-  easyApplyToggle: document.getElementById("easyApplyToggle"),
-  sortLatestToggle: document.getElementById("sortLatestToggle"),
-  activeFiltersList: document.getElementById("activeFiltersList"),
-  clearAllBtn: document.getElementById("clearAllBtn"),
-  loadingOverlay: document.getElementById("loadingOverlay"),
-  filterButtons: document.querySelectorAll(".filter-btn"),
+// popup.js — the current tab's URL is the single source of truth for search filters;
+// auto-refresh state lives in background.js.
+
+const PARAMS = {
+  time: "f_TPR",
+  workType: "f_WT",
+  experience: "f_E",
+  easyApply: "f_AL",
+  sort: "sortBy",
 };
 
-// ===== State =====
-let state = {
-  currentFilter: null,
-  autoRefresh: false,
-  easyApply: false,
-  sortByLatest: false,
-  isLinkedInJobs: false,
+const INTERVAL_LABELS = { 0.5: "30s", 1: "1m", 2: "2m", 5: "5m" };
+const WORK_TYPE_LABELS = { 1: "On-site", 2: "Remote", 3: "Hybrid" };
+const EXPERIENCE_LABELS = { 1: "Internship", 2: "Entry", 3: "Associate", 4: "Mid-Senior", 5: "Director", 6: "Executive" };
+const MAX_CUSTOM_MINUTES = 43200; // 30 days
+const APPLY_DELAY_MS = 350;
+
+const $ = (id) => document.getElementById(id);
+
+const el = {
+  livePill: $("livePill"),
+  livePillText: $("livePillText"),
+  emptyState: $("emptyState"),
+  openJobsBtn: $("openJobsBtn"),
+  stopElsewhereBtn: $("stopElsewhereBtn"),
+  mainContent: $("mainContent"),
+  autoRefreshToggle: $("autoRefreshToggle"),
+  refreshSub: $("refreshSub"),
+  intervalGroup: $("intervalGroup"),
+  intervalButtons: [...document.querySelectorAll("#intervalGroup [data-interval]")],
+  timeHint: $("timeHint"),
+  timeChips: [...document.querySelectorAll("#timeGroup [data-seconds]")],
+  customForm: $("customForm"),
+  customField: $("customField"),
+  customMinutes: $("customMinutes"),
+  customError: $("customError"),
+  workTypeChips: [...document.querySelectorAll("#workTypeGroup [data-value]")],
+  experienceChips: [...document.querySelectorAll("#experienceGroup [data-value]")],
+  easyApplyToggle: $("easyApplyToggle"),
+  sortLatestToggle: $("sortLatestToggle"),
+  activeFiltersList: $("activeFiltersList"),
+  clearAllBtn: $("clearAllBtn"),
+  toast: $("toast"),
 };
 
-// ===== Initialization =====
-document.addEventListener("DOMContentLoaded", async () => {
-  await checkCurrentTab();
-  await loadSavedPreferences();
-  bindEvents();
-  syncUIFromURL();
-});
+const state = {
+  tab: null,
+  filters: {
+    seconds: null, // f_TPR as seconds, or null
+    workType: new Set(),
+    experience: new Set(),
+    easyApply: false,
+    sortLatest: false,
+  },
+  refresh: { running: false, interval: 0.5, targetTabId: null },
+};
 
-// ===== Tab Checking =====
-async function checkCurrentTab() {
+let applyTimer = null;
+let toastTimer = null;
+
+// ===== Helpers =====
+function isJobsUrl(url) {
+  return typeof url === "string" && /^https:\/\/www\.linkedin\.com\/jobs(\/|$|\?)/.test(url);
+}
+
+function send(message) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError || !response?.ok) {
+        console.error("Job Sniper:", chrome.runtime.lastError?.message || response?.error);
+        resolve(null);
+        return;
+      }
+      resolve(response.status);
+    });
+  });
+}
+
+function parseList(value) {
+  return new Set((value || "").split(",").map((v) => v.trim()).filter(Boolean));
+}
+
+function formatDuration(seconds) {
+  const units = [
+    [604800, "w"],
+    [86400, "d"],
+    [3600, "h"],
+    [60, "m"],
+  ];
+  for (const [size, unit] of units) {
+    if (seconds >= size && seconds % size === 0) return `${seconds / size}${unit}`;
+  }
+  return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`;
+}
+
+function showToast(text) {
+  el.toast.textContent = text;
+  el.toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.toast.classList.remove("show"), 1600);
+}
+
+// ===== URL <-> state =====
+function readFiltersFromUrl(urlString) {
+  const url = new URL(urlString);
+  const p = url.searchParams;
+  const tpr = /^r(\d+)$/.exec(p.get(PARAMS.time) || "");
+
+  state.filters.seconds = tpr ? Number(tpr[1]) : null;
+  state.filters.workType = parseList(p.get(PARAMS.workType));
+  state.filters.experience = parseList(p.get(PARAMS.experience));
+  state.filters.easyApply = p.get(PARAMS.easyApply) === "true";
+  state.filters.sortLatest = p.get(PARAMS.sort) === "DD";
+}
+
+function buildUrl(urlString, filters) {
+  const url = new URL(urlString);
+  const p = url.searchParams;
+  const setOrDelete = (key, value) => (value ? p.set(key, value) : p.delete(key));
+  const joinSorted = (set) => [...set].sort().join(",");
+
+  setOrDelete(PARAMS.time, filters.seconds ? `r${filters.seconds}` : null);
+  setOrDelete(PARAMS.workType, joinSorted(filters.workType));
+  setOrDelete(PARAMS.experience, joinSorted(filters.experience));
+  setOrDelete(PARAMS.easyApply, filters.easyApply ? "true" : null);
+  setOrDelete(PARAMS.sort, filters.sortLatest ? "DD" : null);
+
+  // Filters changed, so any pagination / selected job no longer applies.
+  p.delete("start");
+  p.delete("currentJobId");
+
+  return url.toString();
+}
+
+// Batch rapid clicks into a single page load.
+function scheduleApply() {
+  clearTimeout(applyTimer);
+  applyTimer = setTimeout(applyFilters, APPLY_DELAY_MS);
+}
+
+async function applyFilters() {
+  applyTimer = null;
+  if (!state.tab) return;
+
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.url && tab.url.includes("linkedin.com/jobs")) {
-      state.isLinkedInJobs = true;
-      elements.warning.classList.add("hidden");
-      elements.mainContent.classList.remove("hidden");
-    } else {
-      state.isLinkedInJobs = false;
-      elements.warning.classList.remove("hidden");
-      elements.mainContent.classList.add("hidden");
+    const tab = await chrome.tabs.get(state.tab.id);
+    if (!isJobsUrl(tab.url)) {
+      showToast("This tab is no longer on LinkedIn Jobs");
+      return;
     }
+
+    const next = buildUrl(tab.url, state.filters);
+    if (next === tab.url) return;
+
+    await chrome.tabs.update(tab.id, { url: next });
+    state.tab = { ...tab, url: next };
+    showToast("Updating results…");
   } catch (err) {
-    console.error("Error checking tab:", err);
-    elements.warning.classList.remove("hidden");
-    elements.mainContent.classList.add("hidden");
+    console.error("Job Sniper: failed to update tab", err);
+    showToast("Couldn't update the page");
   }
 }
 
-// ===== Load Saved Preferences =====
-async function loadSavedPreferences() {
-  try {
-    const result = await chrome.storage.local.get([
-      "timeFilter",
-      "autoRefresh",
-      "easyApply",
-      "sortByLatest",
-    ]);
+// ===== Rendering =====
+function renderRefresh() {
+  const { running, interval, targetTabId } = state.refresh;
+  const onThisTab = running && state.tab && targetTabId === state.tab.id;
+  const label = INTERVAL_LABELS[interval] || "30s";
 
-    if (result.timeFilter) {
-      state.currentFilter = result.timeFilter;
-    }
-    if (result.autoRefresh) {
-      state.autoRefresh = true;
-      elements.autoRefreshToggle.checked = true;
-    }
-    if (result.easyApply) {
-      state.easyApply = true;
-      elements.easyApplyToggle.checked = true;
-    }
-    if (result.sortByLatest) {
-      state.sortByLatest = true;
-      elements.sortLatestToggle.checked = true;
-    }
+  el.livePill.dataset.live = String(running);
+  el.livePillText.textContent = running ? `Live · ${label}` : "Idle";
 
-    updateFilterButtonStates();
-    updateActiveFilters();
-  } catch (err) {
-    console.error("Error loading preferences:", err);
+  el.autoRefreshToggle.checked = Boolean(onThisTab);
+  if (onThisTab) {
+    el.refreshSub.textContent = `Reloading this search every ${label}`;
+  } else if (running) {
+    el.refreshSub.textContent = "Running on another tab — switch on to move it here";
+  } else {
+    el.refreshSub.textContent = "Reload this search on a timer";
   }
+
+  const index = el.intervalButtons.findIndex((b) => Number(b.dataset.interval) === interval);
+  el.intervalButtons.forEach((b, i) => {
+    const checked = i === index;
+    b.setAttribute("aria-checked", String(checked));
+    b.tabIndex = checked ? 0 : -1;
+  });
+  el.intervalGroup.style.setProperty("--i", String(Math.max(index, 0)));
+
+  el.stopElsewhereBtn.classList.toggle("hidden", !running);
 }
 
-// ===== Sync UI from current URL =====
-async function syncUIFromURL() {
-  if (!state.isLinkedInJobs) return;
+function renderFilters() {
+  const f = state.filters;
 
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab || !tab.url) return;
+  const presetMatch = el.timeChips.some((c) => Number(c.dataset.seconds) === f.seconds);
+  el.timeChips.forEach((c) => c.setAttribute("aria-pressed", String(Number(c.dataset.seconds) === f.seconds)));
 
-    const url = new URL(tab.url);
-
-    // Sync time filter
-    const tpr = url.searchParams.get("f_TPR");
-    if (tpr) {
-      state.currentFilter = tpr;
-      updateFilterButtonStates();
-    }
-
-    // Sync easy apply
-    const easyApply = url.searchParams.get("f_AL");
-    if (easyApply === "true") {
-      state.easyApply = true;
-      elements.easyApplyToggle.checked = true;
-    }
-
-    // Sync sort
-    const sortBy = url.searchParams.get("sortBy");
-    if (sortBy === "DD") {
-      state.sortByLatest = true;
-      elements.sortLatestToggle.checked = true;
-    }
-
-    updateActiveFilters();
-    updateStatusText();
-  } catch (err) {
-    console.error("Error syncing from URL:", err);
+  const isCustom = f.seconds != null && !presetMatch;
+  el.customField.classList.toggle("active", isCustom);
+  if (isCustom && document.activeElement !== el.customMinutes) {
+    el.customMinutes.value = f.seconds % 60 === 0 ? String(f.seconds / 60) : "";
   }
+
+  el.timeHint.textContent = f.seconds ? `Last ${formatDuration(f.seconds)}` : "Any time";
+  el.timeHint.classList.toggle("on", Boolean(f.seconds));
+
+  el.workTypeChips.forEach((c) => c.setAttribute("aria-pressed", String(f.workType.has(c.dataset.value))));
+  el.experienceChips.forEach((c) => c.setAttribute("aria-pressed", String(f.experience.has(c.dataset.value))));
+
+  el.easyApplyToggle.checked = f.easyApply;
+  el.sortLatestToggle.checked = f.sortLatest;
+
+  renderSummary();
 }
 
-// ===== Event Binding =====
+function renderSummary() {
+  const f = state.filters;
+  const tags = [];
+
+  if (f.seconds) tags.push(`≤ ${formatDuration(f.seconds)}`);
+  [...f.workType].sort().forEach((v) => tags.push(WORK_TYPE_LABELS[v] || `Type ${v}`));
+  [...f.experience].sort().forEach((v) => tags.push(EXPERIENCE_LABELS[v] || `Level ${v}`));
+  if (f.easyApply) tags.push("Easy Apply");
+  if (f.sortLatest) tags.push("Newest");
+
+  if (tags.length) {
+    const count = Object.assign(document.createElement("strong"), {
+      textContent: `${tags.length} active`,
+    });
+    el.activeFiltersList.replaceChildren(count, ` · ${tags.join(", ")}`);
+    el.activeFiltersList.title = tags.join(", ");
+  } else {
+    el.activeFiltersList.replaceChildren("No filters applied");
+    el.activeFiltersList.removeAttribute("title");
+  }
+
+  const hasAnything = tags.length > 0 || el.autoRefreshToggle.checked;
+  el.clearAllBtn.disabled = !hasAnything;
+  el.clearAllBtn.style.visibility = hasAnything ? "visible" : "hidden";
+}
+
+// ===== Event handlers =====
+function onTimeChip(chip) {
+  const seconds = Number(chip.dataset.seconds);
+  state.filters.seconds = state.filters.seconds === seconds ? null : seconds;
+  el.customMinutes.value = "";
+  hideCustomError();
+  renderFilters();
+  scheduleApply();
+}
+
+function hideCustomError() {
+  el.customError.classList.add("hidden");
+  el.customField.classList.remove("invalid");
+}
+
+function onCustomSubmit(e) {
+  e.preventDefault();
+  const raw = el.customMinutes.value.trim();
+  const minutes = Number(raw);
+
+  if (!raw || !Number.isInteger(minutes) || minutes < 1 || minutes > MAX_CUSTOM_MINUTES) {
+    el.customError.classList.remove("hidden");
+    el.customField.classList.add("invalid");
+    return;
+  }
+
+  hideCustomError();
+  state.filters.seconds = minutes * 60;
+  el.customMinutes.blur();
+  renderFilters();
+  scheduleApply();
+}
+
+function onSetChip(chip, set) {
+  const value = chip.dataset.value;
+  if (set.has(value)) set.delete(value);
+  else set.add(value);
+  renderFilters();
+  scheduleApply();
+}
+
+async function onAutoRefreshToggle() {
+  const wantOn = el.autoRefreshToggle.checked;
+  el.autoRefreshToggle.disabled = true;
+
+  const status = wantOn
+    ? await send({ action: "startAutoRefresh", tabId: state.tab.id, interval: state.refresh.interval })
+    : await send({ action: "stopAutoRefresh" });
+
+  el.autoRefreshToggle.disabled = false;
+
+  if (status) {
+    state.refresh = status;
+    showToast(wantOn ? `Auto-refresh on · every ${INTERVAL_LABELS[status.interval]}` : "Auto-refresh off");
+  } else {
+    showToast("Couldn't change auto-refresh");
+  }
+  renderRefresh();
+  renderSummary();
+}
+
+async function onIntervalSelect(button) {
+  const interval = Number(button.dataset.interval);
+  if (interval === state.refresh.interval) return;
+
+  state.refresh.interval = interval; // optimistic, so the glider moves immediately
+  renderRefresh();
+
+  const status = await send({ action: "setInterval", interval });
+  if (status) state.refresh = status;
+  renderRefresh();
+}
+
+function onIntervalKeydown(e) {
+  const keys = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+  if (!(e.key in keys)) return;
+  e.preventDefault();
+  const current = el.intervalButtons.findIndex((b) => b.getAttribute("aria-checked") === "true");
+  const next = el.intervalButtons[(current + keys[e.key] + el.intervalButtons.length) % el.intervalButtons.length];
+  next.focus();
+  onIntervalSelect(next);
+}
+
+async function onClearAll() {
+  state.filters = {
+    seconds: null,
+    workType: new Set(),
+    experience: new Set(),
+    easyApply: false,
+    sortLatest: false,
+  };
+  el.customMinutes.value = "";
+  hideCustomError();
+
+  if (el.autoRefreshToggle.checked) {
+    const status = await send({ action: "stopAutoRefresh" });
+    if (status) state.refresh = status;
+    renderRefresh();
+  }
+
+  renderFilters();
+  clearTimeout(applyTimer);
+  await applyFilters();
+  showToast("All filters cleared");
+}
+
+async function onOpenJobs() {
+  const target = "https://www.linkedin.com/jobs/search/?sortBy=DD";
+  if (state.tab && /^https:\/\/www\.linkedin\.com\//.test(state.tab.url || "")) {
+    await chrome.tabs.update(state.tab.id, { url: target });
+  } else {
+    await chrome.tabs.create({ url: target });
+  }
+  window.close();
+}
+
+async function onStopElsewhere() {
+  const status = await send({ action: "stopAutoRefresh" });
+  if (status) state.refresh = status;
+  renderRefresh();
+  showToast("Auto-refresh off");
+}
+
 function bindEvents() {
-  // Time filter buttons
-  elements.filterButtons.forEach((btn) => {
-    btn.addEventListener("click", () => handleFilterClick(btn));
+  el.timeChips.forEach((c) => c.addEventListener("click", () => onTimeChip(c)));
+  el.customForm.addEventListener("submit", onCustomSubmit);
+  el.customMinutes.addEventListener("input", hideCustomError);
+  el.workTypeChips.forEach((c) => c.addEventListener("click", () => onSetChip(c, state.filters.workType)));
+  el.experienceChips.forEach((c) => c.addEventListener("click", () => onSetChip(c, state.filters.experience)));
+
+  el.easyApplyToggle.addEventListener("change", () => {
+    state.filters.easyApply = el.easyApplyToggle.checked;
+    renderSummary();
+    scheduleApply();
+  });
+  el.sortLatestToggle.addEventListener("change", () => {
+    state.filters.sortLatest = el.sortLatestToggle.checked;
+    renderSummary();
+    scheduleApply();
   });
 
-  // Toggles
-  elements.autoRefreshToggle.addEventListener("change", handleAutoRefreshToggle);
-  elements.easyApplyToggle.addEventListener("change", handleEasyApplyToggle);
-  elements.sortLatestToggle.addEventListener("change", handleSortLatestToggle);
+  el.autoRefreshToggle.addEventListener("change", onAutoRefreshToggle);
+  el.intervalButtons.forEach((b) => b.addEventListener("click", () => onIntervalSelect(b)));
+  el.intervalGroup.addEventListener("keydown", onIntervalKeydown);
 
-  // Clear all
-  elements.clearAllBtn.addEventListener("click", handleClearAll);
-}
+  el.clearAllBtn.addEventListener("click", onClearAll);
+  el.openJobsBtn.addEventListener("click", onOpenJobs);
+  el.stopElsewhereBtn.addEventListener("click", onStopElsewhere);
 
-// ===== Filter Click Handler =====
-async function handleFilterClick(btn) {
-  const value = btn.dataset.value;
-  const label = btn.dataset.label;
-
-  // Toggle off if already active
-  if (state.currentFilter === value) {
-    state.currentFilter = null;
-    await savePreference("timeFilter", null);
-    await updateURL();
-    setStatus("Filter removed");
-  } else {
-    state.currentFilter = value;
-    await savePreference("timeFilter", value);
-    showLoading();
-    await updateURL();
-    hideLoading();
-    setStatus(`Filter: Last ${label}`);
-  }
-
-  updateFilterButtonStates();
-  updateActiveFilters();
-}
-
-// ===== Auto Refresh Toggle =====
-async function handleAutoRefreshToggle(e) {
-  state.autoRefresh = e.target.checked;
-  await savePreference("autoRefresh", state.autoRefresh);
-
-  if (state.autoRefresh) {
-    chrome.runtime.sendMessage({ action: "startAutoRefresh" });
-    setStatus("Auto-refresh: ON (30s)");
-  } else {
-    chrome.runtime.sendMessage({ action: "stopAutoRefresh" });
-    setStatus("Auto-refresh: OFF");
-  }
-
-  updateActiveFilters();
-}
-
-// ===== Easy Apply Toggle =====
-async function handleEasyApplyToggle(e) {
-  state.easyApply = e.target.checked;
-  await savePreference("easyApply", state.easyApply);
-
-  showLoading();
-  await updateURL();
-  hideLoading();
-
-  setStatus(state.easyApply ? "Easy Apply: ON" : "Easy Apply: OFF");
-  updateActiveFilters();
-}
-
-// ===== Sort by Latest Toggle =====
-async function handleSortLatestToggle(e) {
-  state.sortByLatest = e.target.checked;
-  await savePreference("sortByLatest", state.sortByLatest);
-
-  showLoading();
-  await updateURL();
-  hideLoading();
-
-  setStatus(state.sortByLatest ? "Sort: Most Recent" : "Sort: Default");
-  updateActiveFilters();
-}
-
-// ===== Clear All =====
-async function handleClearAll() {
-  // Reset state
-  state.currentFilter = null;
-  state.easyApply = false;
-  state.sortByLatest = false;
-  state.autoRefresh = false;
-
-  // Update UI
-  elements.autoRefreshToggle.checked = false;
-  elements.easyApplyToggle.checked = false;
-  elements.sortLatestToggle.checked = false;
-
-  // Stop auto-refresh
-  chrome.runtime.sendMessage({ action: "stopAutoRefresh" });
-
-  // Clear storage
-  await chrome.storage.local.clear();
-
-  // Update URL - remove our params
-  showLoading();
-  await clearURLParams();
-  hideLoading();
-
-  updateFilterButtonStates();
-  updateActiveFilters();
-  setStatus("All filters cleared");
-}
-
-// ===== URL Management =====
-async function updateURL() {
-  if (!state.isLinkedInJobs) return;
-
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab || !tab.url) return;
-
-    const url = new URL(tab.url);
-
-    // Time filter
-    if (state.currentFilter) {
-      url.searchParams.set("f_TPR", state.currentFilter);
-    } else {
-      url.searchParams.delete("f_TPR");
-    }
-
-    // Easy Apply
-    if (state.easyApply) {
-      url.searchParams.set("f_AL", "true");
-    } else {
-      url.searchParams.delete("f_AL");
-    }
-
-    // Sort by latest
-    if (state.sortByLatest) {
-      url.searchParams.set("sortBy", "DD");
-    } else {
-      url.searchParams.delete("sortBy");
-    }
-
-    await chrome.tabs.update(tab.id, { url: url.toString() });
-  } catch (err) {
-    console.error("Error updating URL:", err);
-    setStatus("Error updating page");
-  }
-}
-
-async function clearURLParams() {
-  if (!state.isLinkedInJobs) return;
-
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab || !tab.url) return;
-
-    const url = new URL(tab.url);
-    url.searchParams.delete("f_TPR");
-    url.searchParams.delete("f_AL");
-    url.searchParams.delete("sortBy");
-
-    await chrome.tabs.update(tab.id, { url: url.toString() });
-  } catch (err) {
-    console.error("Error clearing URL:", err);
-  }
-}
-
-// ===== UI Updates =====
-function updateFilterButtonStates() {
-  elements.filterButtons.forEach((btn) => {
-    if (btn.dataset.value === state.currentFilter) {
-      btn.classList.add("active");
-    } else {
-      btn.classList.remove("active");
-    }
+  // If the popup closes while a change is pending, apply it right away.
+  window.addEventListener("pagehide", () => {
+    if (applyTimer) applyFilters();
   });
 }
 
-function updateActiveFilters() {
-  const filters = [];
+// ===== Init =====
+async function init() {
+  bindEvents();
 
-  if (state.currentFilter) {
-    const btn = document.querySelector(`[data-value="${state.currentFilter}"]`);
-    if (btn) {
-      filters.push(`Last ${btn.dataset.label}`);
-    }
-  }
+  const [[tab], status] = await Promise.all([
+    chrome.tabs.query({ active: true, currentWindow: true }),
+    send({ action: "getStatus" }),
+  ]);
 
-  if (state.easyApply) {
-    filters.push("Easy Apply");
-  }
+  state.tab = tab || null;
+  if (status) state.refresh = status;
 
-  if (state.sortByLatest) {
-    filters.push("Sort: Latest");
-  }
+  const onJobs = Boolean(tab && isJobsUrl(tab.url));
+  el.emptyState.classList.toggle("hidden", onJobs);
+  el.mainContent.classList.toggle("hidden", !onJobs);
 
-  if (state.autoRefresh) {
-    filters.push("Auto-refresh: 30s");
-  }
+  if (onJobs) readFiltersFromUrl(tab.url);
 
-  if (filters.length === 0) {
-    elements.activeFiltersList.innerHTML = '<span class="no-filters">No filters applied</span>';
-  } else {
-    elements.activeFiltersList.innerHTML = filters
-      .map((f) => `<span class="filter-tag">${f}</span>`)
-      .join("");
-  }
+  renderRefresh();
+  renderFilters();
 }
 
-function setStatus(text) {
-  elements.statusText.textContent = text;
-  elements.statusText.style.animation = "none";
-  // Trigger reflow
-  void elements.statusText.offsetHeight;
-  elements.statusText.style.animation = "fadeIn 0.3s ease";
-}
-
-function updateStatusText() {
-  const parts = [];
-
-  if (state.currentFilter) {
-    const btn = document.querySelector(`[data-value="${state.currentFilter}"]`);
-    if (btn) parts.push(`Last ${btn.dataset.label}`);
-  }
-  if (state.easyApply) parts.push("Easy Apply");
-  if (state.sortByLatest) parts.push("Latest");
-  if (state.autoRefresh) parts.push("Auto-refresh");
-
-  if (parts.length > 0) {
-    setStatus(parts.join(" · "));
-  } else {
-    setStatus("Ready to snipe");
-  }
-}
-
-// ===== Storage =====
-async function savePreference(key, value) {
-  try {
-    if (value === null || value === false) {
-      await chrome.storage.local.remove(key);
-    } else {
-      await chrome.storage.local.set({ [key]: value });
-    }
-  } catch (err) {
-    console.error("Error saving preference:", err);
-  }
-}
-
-// ===== Loading =====
-function showLoading() {
-  elements.loadingOverlay.classList.remove("hidden");
-}
-
-function hideLoading() {
-  setTimeout(() => {
-    elements.loadingOverlay.classList.add("hidden");
-  }, 400);
-}
+document.addEventListener("DOMContentLoaded", init);

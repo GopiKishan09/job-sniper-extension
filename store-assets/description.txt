@@ -1,0 +1,32 @@
+Be the first to apply. Job Sniper shows you LinkedIn jobs minutes after they're posted, filtered to exactly what you want, and keeps the results fresh automatically.
+
+WHAT IT DOES
+
+• Posted within: 1 min, 5 min, 10 min, 30 min, 1 hour, 24 hours or 1 week, or type any number of minutes
+• Auto-refresh every 30 seconds, 1, 2 or 5 minutes. It stays locked to your search tab, even when you switch tabs, and stops by itself if you close the tab
+• Work type: Remote, Hybrid, On-site
+• Experience level: Internship, Entry, Associate, Mid-Senior, Director, Executive
+• Easy Apply only
+• Newest first
+
+HOW TO USE
+
+1. Open a job search on LinkedIn Jobs
+2. Click the Job Sniper icon and pick your filters. Several quick changes are applied in a single page load
+3. Turn on auto-refresh and choose an interval
+
+The filters always match the page you're on, so what you see in the popup is exactly what's applied.
+
+PRIVACY
+
+No account and no tracking. Job Sniper does not collect, store or send any personal data. It only changes the filters in your LinkedIn Jobs page address and reloads that tab. Your auto-refresh setting is saved locally in your browser.
+
+PERMISSIONS
+
+• tabs: read and update the LinkedIn Jobs tab's address to apply filters, and reload it for auto-refresh
+• storage: remember your auto-refresh setting locally
+• alarms: run the auto-refresh timer
+• notifications: tell you when auto-refresh stops because the tab was closed
+• linkedin.com: the extension only works on LinkedIn Jobs pages
+
+Job Sniper is an independent tool and is not affiliated with or endorsed by LinkedIn.
