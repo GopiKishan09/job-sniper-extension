@@ -29,6 +29,7 @@ LinkedIn's own "Date posted" filter only goes down to the past 24 hours. The URL
 - **Work type.** Remote, Hybrid, On-site.
 - **Experience.** Internship through Executive.
 - **Easy Apply only**, and **newest first**.
+- **Hide Promoted & Viewed jobs.** Removes sponsored listings and jobs you've already opened from the results list. A job you open during the current search stays visible until the next reload, so the list doesn't jump around under you.
 
 The popup reads your filters straight from the page URL, so it always shows what's actually applied. If you click several filters quickly, the page only reloads once.
 
@@ -56,10 +57,10 @@ You need Chrome 120 or newer, because the 30-second refresh depends on it.
 | Permission | Why |
 |---|---|
 | `tabs` | To read and update the LinkedIn Jobs tab's URL, and to reload that tab |
-| `storage` | To remember whether auto-refresh is on, and at what interval |
+| `storage` | To remember whether auto-refresh is on, at what interval, and your hide settings |
 | `alarms` | To run the refresh timer |
 | `notifications` | To let you know when auto-refresh stops because the tab was closed |
-| `linkedin.com` | It only runs on LinkedIn Jobs pages |
+| `linkedin.com` | It only runs on LinkedIn Jobs pages, where it hides Promoted/Viewed cards if you turn that on |
 
 No data is collected or sent anywhere. There's no backend.
 
@@ -70,6 +71,7 @@ extension/
   manifest.json
   popup.html / popup.css / popup.js   the popup UI
   background.js                       auto-refresh timer
+  content.js                          hides Promoted / Viewed job cards
   icons/                              icons (icon.svg is the source)
   fonts/                              Inter, bundled locally
 store-assets/                         Web Store screenshots and promo tiles
@@ -77,7 +79,7 @@ store-assets/                         Web Store screenshots and promo tiles
 
 ## Heads up
 
-This isn't affiliated with LinkedIn. It only changes the search URL, the same way you'd do by hand. Keep the refresh interval reasonable. Hammering the page every 30 seconds all day isn't a great idea.
+This isn't affiliated with LinkedIn. It only changes the search URL, the same way you'd do by hand, and hides cards on the page if you ask it to. Keep the refresh interval reasonable. Hammering the page every 30 seconds all day isn't a great idea.
 
 ## License
 

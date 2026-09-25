@@ -38,6 +38,9 @@ const el = {
   experienceChips: [...document.querySelectorAll("#experienceGroup [data-value]")],
   easyApplyToggle: $("easyApplyToggle"),
   sortLatestToggle: $("sortLatestToggle"),
+  hidePromotedToggle: $("hidePromotedToggle"),
+  hideViewedToggle: $("hideViewedToggle"),
+  hiddenHint: $("hiddenHint"),
   activeFiltersList: $("activeFiltersList"),
   clearAllBtn: $("clearAllBtn"),
   toast: $("toast"),
@@ -52,6 +55,8 @@ const state = {
     easyApply: false,
     sortLatest: false,
   },
+  // Not URL filters: content.js hides these cards on every LinkedIn Jobs tab.
+  hide: { hidePromoted: false, hideViewed: false },
   refresh: { running: false, interval: 0.5, targetTabId: null },
 };
 
@@ -98,6 +103,34 @@ function showToast(text) {
   el.toast.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.toast.classList.remove("show"), 1600);
+}
+
+// ===== Hide Promoted / Viewed =====
+async function loadHideSettings() {
+  const stored = await chrome.storage.local.get(Object.keys(state.hide));
+  for (const key of Object.keys(state.hide)) state.hide[key] = Boolean(stored[key]);
+}
+
+function saveHideSettings() {
+  return chrome.storage.local.set(state.hide);
+}
+
+// content.js isn't in tabs that were open before the extension was installed.
+async function refreshHiddenCount() {
+  const on = state.hide.hidePromoted || state.hide.hideViewed;
+  if (!on || !state.tab) {
+    el.hiddenHint.textContent = "";
+    return;
+  }
+  try {
+    const response = await chrome.tabs.sendMessage(state.tab.id, { action: "getHiddenCount" });
+    const n = response?.hidden ?? 0;
+    el.hiddenHint.textContent = `${n} hidden`;
+    el.hiddenHint.classList.toggle("on", n > 0);
+  } catch {
+    el.hiddenHint.textContent = "Reload page";
+    el.hiddenHint.classList.remove("on");
+  }
 }
 
 // ===== URL <-> state =====
@@ -210,6 +243,8 @@ function renderFilters() {
 
   el.easyApplyToggle.checked = f.easyApply;
   el.sortLatestToggle.checked = f.sortLatest;
+  el.hidePromotedToggle.checked = state.hide.hidePromoted;
+  el.hideViewedToggle.checked = state.hide.hideViewed;
 
   renderSummary();
 }
@@ -223,6 +258,8 @@ function renderSummary() {
   [...f.experience].sort().forEach((v) => tags.push(EXPERIENCE_LABELS[v] || `Level ${v}`));
   if (f.easyApply) tags.push("Easy Apply");
   if (f.sortLatest) tags.push("Newest");
+  if (state.hide.hidePromoted) tags.push("No promoted");
+  if (state.hide.hideViewed) tags.push("No viewed");
 
   if (tags.length) {
     const count = Object.assign(document.createElement("strong"), {
@@ -281,6 +318,14 @@ function onSetChip(chip, set) {
   scheduleApply();
 }
 
+async function onHideToggle(key, input) {
+  state.hide[key] = input.checked;
+  renderSummary();
+  await saveHideSettings();
+  // content.js rescans on the storage change; give it a moment before counting.
+  setTimeout(refreshHiddenCount, 100);
+}
+
 async function onAutoRefreshToggle() {
   const wantOn = el.autoRefreshToggle.checked;
   el.autoRefreshToggle.disabled = true;
@@ -334,6 +379,12 @@ async function onClearAll() {
   el.customMinutes.value = "";
   hideCustomError();
 
+  if (state.hide.hidePromoted || state.hide.hideViewed) {
+    state.hide = { hidePromoted: false, hideViewed: false };
+    await saveHideSettings();
+    refreshHiddenCount();
+  }
+
   if (el.autoRefreshToggle.checked) {
     const status = await send({ action: "stopAutoRefresh" });
     if (status) state.refresh = status;
@@ -381,6 +432,9 @@ function bindEvents() {
     scheduleApply();
   });
 
+  el.hidePromotedToggle.addEventListener("change", () => onHideToggle("hidePromoted", el.hidePromotedToggle));
+  el.hideViewedToggle.addEventListener("change", () => onHideToggle("hideViewed", el.hideViewedToggle));
+
   el.autoRefreshToggle.addEventListener("change", onAutoRefreshToggle);
   el.intervalButtons.forEach((b) => b.addEventListener("click", () => onIntervalSelect(b)));
   el.intervalGroup.addEventListener("keydown", onIntervalKeydown);
@@ -402,6 +456,7 @@ async function init() {
   const [[tab], status] = await Promise.all([
     chrome.tabs.query({ active: true, currentWindow: true }),
     send({ action: "getStatus" }),
+    loadHideSettings(),
   ]);
 
   state.tab = tab || null;
@@ -415,6 +470,7 @@ async function init() {
 
   renderRefresh();
   renderFilters();
+  if (onJobs) refreshHiddenCount();
 }
 
 document.addEventListener("DOMContentLoaded", init);

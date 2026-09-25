@@ -8,6 +8,7 @@ WHAT IT DOES
 • Experience level: Internship, Entry, Associate, Mid-Senior, Director, Executive
 • Easy Apply only
 • Newest first
+• Hide Promoted and already Viewed jobs from the results list
 
 HOW TO USE
 
@@ -19,12 +20,12 @@ The filters always match the page you're on, so what you see in the popup is exa
 
 PRIVACY
 
-No account and no tracking. Job Sniper does not collect, store or send any personal data. It only changes the filters in your LinkedIn Jobs page address and reloads that tab. Your auto-refresh setting is saved locally in your browser.
+No account and no tracking. Job Sniper does not collect, store or send any personal data. It only changes the filters in your LinkedIn Jobs page address and reloads that tab, and can hide Promoted or Viewed job cards on the page. Your settings are saved locally in your browser.
 
 PERMISSIONS
 
 • tabs: read and update the LinkedIn Jobs tab's address to apply filters, and reload it for auto-refresh
-• storage: remember your auto-refresh setting locally
+• storage: remember your auto-refresh and hide settings locally
 • alarms: run the auto-refresh timer
 • notifications: tell you when auto-refresh stops because the tab was closed
 • linkedin.com: the extension only works on LinkedIn Jobs pages

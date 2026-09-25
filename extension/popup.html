@@ -26,7 +26,7 @@
         </div>
         <div>
           <h1>Job Sniper</h1>
-          <p class="tagline">LinkedIn, minutes after posting · v1.1</p>
+          <p class="tagline">LinkedIn, minutes after posting · v1.2</p>
         </div>
       </div>
       <div class="pill" id="livePill" data-live="false">
@@ -136,6 +136,30 @@
             <span class="row-label">Newest first</span>
             <span class="switch">
               <input type="checkbox" id="sortLatestToggle" aria-label="Sort by most recent">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Hide in results -->
+      <section class="glass card">
+        <div class="card-head">
+          <h2 class="card-title">Hide in results</h2>
+          <span class="card-hint" id="hiddenHint"></span>
+        </div>
+        <div class="toggle-pair">
+          <label class="toggle-cell">
+            <span class="row-label">Promoted</span>
+            <span class="switch">
+              <input type="checkbox" id="hidePromotedToggle" aria-label="Hide promoted jobs">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </span>
+          </label>
+          <label class="toggle-cell">
+            <span class="row-label">Viewed</span>
+            <span class="switch">
+              <input type="checkbox" id="hideViewedToggle" aria-label="Hide jobs you've already viewed">
               <span class="switch-track"><span class="switch-thumb"></span></span>
             </span>
           </label>
