@@ -5,7 +5,7 @@
 <h1 align="center">Job Sniper</h1>
 
 <p align="center">
-  A small Chrome extension for LinkedIn Jobs. Filter by how recently a job was posted (down to the last minute) and let the page refresh itself.
+  A small Chrome extension for LinkedIn Jobs. See the newest jobs first, let the search refresh itself, and hide Promoted and already Viewed jobs.
 </p>
 
 <p align="center">
