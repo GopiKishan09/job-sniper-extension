@@ -38,6 +38,8 @@ const el = {
   experienceChips: [...document.querySelectorAll("#experienceGroup [data-value]")],
   easyApplyToggle: $("easyApplyToggle"),
   sortLatestToggle: $("sortLatestToggle"),
+  hidePromotedToggle: $("hidePromotedToggle"),
+  hideViewedToggle: $("hideViewedToggle"),
   activeFiltersList: $("activeFiltersList"),
   clearAllBtn: $("clearAllBtn"),
   toast: $("toast"),
@@ -52,6 +54,9 @@ const state = {
     easyApply: false,
     sortLatest: false,
   },
+  // Not URL filters: content.js hides these cards on every LinkedIn Jobs tab.
+  hide: { hidePromoted: false, hideViewed: false },
+  hiddenCount: 0, // cards content.js is currently hiding in this tab
   refresh: { running: false, interval: 0.5, targetTabId: null },
 };
 
@@ -98,6 +103,33 @@ function showToast(text) {
   el.toast.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.toast.classList.remove("show"), 1600);
+}
+
+// ===== Hide Promoted / Viewed =====
+async function loadHideSettings() {
+  const stored = await chrome.storage.local.get(Object.keys(state.hide));
+  for (const key of Object.keys(state.hide)) state.hide[key] = Boolean(stored[key]);
+}
+
+function saveHideSettings() {
+  return chrome.storage.local.set(state.hide);
+}
+
+// Returns false when content.js isn't in the tab (opened before the extension was installed).
+async function refreshHiddenCounts() {
+  let hidden = { promoted: 0, viewed: 0 };
+  let reachable = true;
+  if (state.tab && (state.hide.hidePromoted || state.hide.hideViewed)) {
+    try {
+      const response = await chrome.tabs.sendMessage(state.tab.id, { action: "getHiddenCount" });
+      hidden = response?.hidden ?? hidden;
+    } catch {
+      reachable = false;
+    }
+  }
+  state.hiddenCount = (state.hide.hidePromoted ? hidden.promoted : 0) + (state.hide.hideViewed ? hidden.viewed : 0);
+  renderSummary();
+  return reachable;
 }
 
 // ===== URL <-> state =====
@@ -210,6 +242,8 @@ function renderFilters() {
 
   el.easyApplyToggle.checked = f.easyApply;
   el.sortLatestToggle.checked = f.sortLatest;
+  el.hidePromotedToggle.checked = state.hide.hidePromoted;
+  el.hideViewedToggle.checked = state.hide.hideViewed;
 
   renderSummary();
 }
@@ -223,12 +257,15 @@ function renderSummary() {
   [...f.experience].sort().forEach((v) => tags.push(EXPERIENCE_LABELS[v] || `Level ${v}`));
   if (f.easyApply) tags.push("Easy Apply");
   if (f.sortLatest) tags.push("Newest");
+  if (state.hide.hidePromoted) tags.push("No promoted");
+  if (state.hide.hideViewed) tags.push("No viewed");
 
   if (tags.length) {
     const count = Object.assign(document.createElement("strong"), {
       textContent: `${tags.length} active`,
     });
-    el.activeFiltersList.replaceChildren(count, ` · ${tags.join(", ")}`);
+    const hidden = state.hiddenCount ? ` · ${state.hiddenCount} hidden` : "";
+    el.activeFiltersList.replaceChildren(count, `${hidden} · ${tags.join(", ")}`);
     el.activeFiltersList.title = tags.join(", ");
   } else {
     el.activeFiltersList.replaceChildren("No filters applied");
@@ -279,6 +316,17 @@ function onSetChip(chip, set) {
   else set.add(value);
   renderFilters();
   scheduleApply();
+}
+
+async function onHideToggle(key, input) {
+  state.hide[key] = input.checked;
+  renderSummary();
+  await saveHideSettings();
+  // content.js rescans on the storage change; give it a moment before counting.
+  setTimeout(async () => {
+    const reachable = await refreshHiddenCounts();
+    if (!reachable && input.checked) showToast("Reload the LinkedIn tab to apply");
+  }, 100);
 }
 
 async function onAutoRefreshToggle() {
@@ -334,6 +382,12 @@ async function onClearAll() {
   el.customMinutes.value = "";
   hideCustomError();
 
+  if (state.hide.hidePromoted || state.hide.hideViewed) {
+    state.hide = { hidePromoted: false, hideViewed: false };
+    await saveHideSettings();
+    refreshHiddenCounts();
+  }
+
   if (el.autoRefreshToggle.checked) {
     const status = await send({ action: "stopAutoRefresh" });
     if (status) state.refresh = status;
@@ -381,6 +435,9 @@ function bindEvents() {
     scheduleApply();
   });
 
+  el.hidePromotedToggle.addEventListener("change", () => onHideToggle("hidePromoted", el.hidePromotedToggle));
+  el.hideViewedToggle.addEventListener("change", () => onHideToggle("hideViewed", el.hideViewedToggle));
+
   el.autoRefreshToggle.addEventListener("change", onAutoRefreshToggle);
   el.intervalButtons.forEach((b) => b.addEventListener("click", () => onIntervalSelect(b)));
   el.intervalGroup.addEventListener("keydown", onIntervalKeydown);
@@ -402,6 +459,7 @@ async function init() {
   const [[tab], status] = await Promise.all([
     chrome.tabs.query({ active: true, currentWindow: true }),
     send({ action: "getStatus" }),
+    loadHideSettings(),
   ]);
 
   state.tab = tab || null;
@@ -415,6 +473,7 @@ async function init() {
 
   renderRefresh();
   renderFilters();
+  if (onJobs) refreshHiddenCounts();
 }
 
 document.addEventListener("DOMContentLoaded", init);

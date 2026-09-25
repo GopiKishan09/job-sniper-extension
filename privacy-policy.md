@@ -2,7 +2,7 @@
 
 **Job Sniper Chrome Extension**
 
-Last updated: April 2026
+Last updated: September 2026
 
 ---
 
@@ -34,7 +34,7 @@ The extension requires the following permissions:
   Used to read and update the LinkedIn Jobs tab's URL (to apply filters) and to reload that tab when auto-refresh is enabled.
 
 * **storage**
-  Used to save the auto-refresh setting (on/off, interval and target tab) locally on your device.
+  Used to save the auto-refresh setting (on/off, interval and target tab) and the Hide Promoted / Hide Viewed settings locally on your device.
 
 * **alarms**
   Used to schedule automatic refresh intervals.
@@ -49,7 +49,7 @@ The extension requires the following permissions:
 * Access is limited to:
   `https://www.linkedin.com/*`
 
-This is required to enhance the LinkedIn job browsing experience.
+This is required to enhance the LinkedIn job browsing experience. On LinkedIn Jobs pages, the extension reads the labels on job cards (such as "Promoted" or "Viewed") only to hide those cards when you turn that option on. Nothing it reads leaves your browser.
 
 ---
 
