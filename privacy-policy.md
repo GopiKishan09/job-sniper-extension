@@ -30,20 +30,17 @@ We do not:
 
 The extension requires the following permissions:
 
-* **activeTab**
-  Used to interact with the currently active LinkedIn job page.
-
 * **tabs**
-  Used to refresh the active tab when auto-refresh is enabled.
+  Used to read and update the LinkedIn Jobs tab's URL (to apply filters) and to reload that tab when auto-refresh is enabled.
 
 * **storage**
-  Used to save user preferences (e.g., auto-refresh on/off).
+  Used to save the auto-refresh setting (on/off, interval and target tab) locally on your device.
 
 * **alarms**
   Used to schedule automatic refresh intervals.
 
 * **notifications**
-  Used to notify users when the page is refreshed.
+  Used to notify users when auto-refresh stops (for example, when the LinkedIn tab is closed).
 
 ---
 
