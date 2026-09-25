@@ -37,6 +37,8 @@ The popup reads your filters straight from the page URL, so it always shows what
 
 ![Work type and experience filters](store-assets/screenshot-3.jpg)
 
+![Hide Promoted and Viewed jobs](store-assets/screenshot-4.jpg)
+
 ## Install
 
 The easy way is the [Chrome Web Store](https://chromewebstore.google.com/detail/ncjjafmodgfhmbpalmoancigcfbbldef).
@@ -75,6 +77,7 @@ extension/
   icons/                              icons (icon.svg is the source)
   fonts/                              Inter, bundled locally
 store-assets/                         Web Store screenshots and promo tiles
+  render.js                           regenerates the screenshots from the real popup
 ```
 
 ## Heads up

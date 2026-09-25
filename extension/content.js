@@ -74,7 +74,7 @@
   function scan() {
     scanTimer = null;
     const onJobs = onJobsPage();
-    let hidden = 0;
+    const hidden = { promoted: 0, viewed: 0 };
 
     const key = currentSearchKey();
     if (key !== searchKey) {
@@ -83,16 +83,17 @@
     }
 
     for (const card of cards()) {
-      let hide = false;
+      let reason = null;
       if (onJobs && isRendered(card)) {
         const labels = cardLabels(card);
         const id = jobId(card);
         if (id && !labels.viewed) seenUnviewed.add(id);
         const viewedEarlier = labels.viewed && !(id && seenUnviewed.has(id));
-        hide = (settings.hidePromoted && labels.promoted) || (settings.hideViewed && viewedEarlier);
+        if (settings.hidePromoted && labels.promoted) reason = "promoted";
+        else if (settings.hideViewed && viewedEarlier) reason = "viewed";
       }
-      if (hide) {
-        hidden++;
+      if (reason) {
+        hidden[reason]++;
         if (!card.hasAttribute(HIDDEN_ATTR)) card.setAttribute(HIDDEN_ATTR, "");
       } else if (card.hasAttribute(HIDDEN_ATTR)) {
         card.removeAttribute(HIDDEN_ATTR);

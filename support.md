@@ -31,6 +31,14 @@ Welcome to the support page for **Job Sniper Chrome Extension**.
 
 ---
 
+### 🙈 Promoted / Viewed jobs not hiding
+
+* Reload the LinkedIn Jobs tab once after installing or updating the extension
+* The labels are matched in English, so switch LinkedIn to English if they aren't hidden
+* A job you open during a search stays visible until the next refresh, on purpose
+
+---
+
 ### 🔔 Notifications not showing
 
 * Check Chrome notification permissions

@@ -40,7 +40,6 @@ const el = {
   sortLatestToggle: $("sortLatestToggle"),
   hidePromotedToggle: $("hidePromotedToggle"),
   hideViewedToggle: $("hideViewedToggle"),
-  hiddenHint: $("hiddenHint"),
   activeFiltersList: $("activeFiltersList"),
   clearAllBtn: $("clearAllBtn"),
   toast: $("toast"),
@@ -57,6 +56,7 @@ const state = {
   },
   // Not URL filters: content.js hides these cards on every LinkedIn Jobs tab.
   hide: { hidePromoted: false, hideViewed: false },
+  hiddenCount: 0, // cards content.js is currently hiding in this tab
   refresh: { running: false, interval: 0.5, targetTabId: null },
 };
 
@@ -115,22 +115,21 @@ function saveHideSettings() {
   return chrome.storage.local.set(state.hide);
 }
 
-// content.js isn't in tabs that were open before the extension was installed.
-async function refreshHiddenCount() {
-  const on = state.hide.hidePromoted || state.hide.hideViewed;
-  if (!on || !state.tab) {
-    el.hiddenHint.textContent = "";
-    return;
+// Returns false when content.js isn't in the tab (opened before the extension was installed).
+async function refreshHiddenCounts() {
+  let hidden = { promoted: 0, viewed: 0 };
+  let reachable = true;
+  if (state.tab && (state.hide.hidePromoted || state.hide.hideViewed)) {
+    try {
+      const response = await chrome.tabs.sendMessage(state.tab.id, { action: "getHiddenCount" });
+      hidden = response?.hidden ?? hidden;
+    } catch {
+      reachable = false;
+    }
   }
-  try {
-    const response = await chrome.tabs.sendMessage(state.tab.id, { action: "getHiddenCount" });
-    const n = response?.hidden ?? 0;
-    el.hiddenHint.textContent = `${n} hidden`;
-    el.hiddenHint.classList.toggle("on", n > 0);
-  } catch {
-    el.hiddenHint.textContent = "Reload page";
-    el.hiddenHint.classList.remove("on");
-  }
+  state.hiddenCount = (state.hide.hidePromoted ? hidden.promoted : 0) + (state.hide.hideViewed ? hidden.viewed : 0);
+  renderSummary();
+  return reachable;
 }
 
 // ===== URL <-> state =====
@@ -265,7 +264,8 @@ function renderSummary() {
     const count = Object.assign(document.createElement("strong"), {
       textContent: `${tags.length} active`,
     });
-    el.activeFiltersList.replaceChildren(count, ` · ${tags.join(", ")}`);
+    const hidden = state.hiddenCount ? ` · ${state.hiddenCount} hidden` : "";
+    el.activeFiltersList.replaceChildren(count, `${hidden} · ${tags.join(", ")}`);
     el.activeFiltersList.title = tags.join(", ");
   } else {
     el.activeFiltersList.replaceChildren("No filters applied");
@@ -323,7 +323,10 @@ async function onHideToggle(key, input) {
   renderSummary();
   await saveHideSettings();
   // content.js rescans on the storage change; give it a moment before counting.
-  setTimeout(refreshHiddenCount, 100);
+  setTimeout(async () => {
+    const reachable = await refreshHiddenCounts();
+    if (!reachable && input.checked) showToast("Reload the LinkedIn tab to apply");
+  }, 100);
 }
 
 async function onAutoRefreshToggle() {
@@ -382,7 +385,7 @@ async function onClearAll() {
   if (state.hide.hidePromoted || state.hide.hideViewed) {
     state.hide = { hidePromoted: false, hideViewed: false };
     await saveHideSettings();
-    refreshHiddenCount();
+    refreshHiddenCounts();
   }
 
   if (el.autoRefreshToggle.checked) {
@@ -470,7 +473,7 @@ async function init() {
 
   renderRefresh();
   renderFilters();
-  if (onJobs) refreshHiddenCount();
+  if (onJobs) refreshHiddenCounts();
 }
 
 document.addEventListener("DOMContentLoaded", init);

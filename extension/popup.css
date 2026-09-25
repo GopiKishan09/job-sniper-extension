@@ -118,8 +118,8 @@ button { cursor: pointer; background: none; border: 0; }
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 12px 10px;
+  gap: 7px;
+  padding: 10px 12px 8px;
 }
 
 .glass {
@@ -131,16 +131,16 @@ button { cursor: pointer; background: none; border: 0; }
   -webkit-backdrop-filter: blur(22px) saturate(160%);
 }
 
-.card { padding: 12px 13px 13px; }
+.card { padding: 11px 13px 12px; }
 
-#mainContent { display: flex; flex-direction: column; gap: 8px; }
+#mainContent { display: flex; flex-direction: column; gap: 7px; }
 
 /* ===== Header ===== */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 2px 4px;
+  padding: 1px 2px 2px;
 }
 
 .brand { display: flex; align-items: center; gap: 10px; }
@@ -217,10 +217,10 @@ h1 {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
 }
 
-.card-head.spaced { margin-top: 10px; }
+.card-head.spaced { margin-top: 9px; }
 
 .card-title {
   font-size: 12.5px;
@@ -250,12 +250,12 @@ h1 {
 
 .divider {
   height: 1px;
-  margin: 11px -13px 9px;
+  margin: 9px -13px 7px;
   background: linear-gradient(90deg, transparent, var(--stroke), transparent);
 }
 
 /* ===== Hero ===== */
-.hero .row { margin-bottom: 10px; }
+.hero .row { margin-bottom: 9px; }
 
 /* ===== Segmented control ===== */
 .segmented {
@@ -308,7 +308,7 @@ h1 {
 .chip-row-3 { display: grid; grid-template-columns: repeat(3, 1fr); }
 
 .chip {
-  height: 30px;
+  height: 29px;
   border-radius: 10px;
   font-size: 13px;
   font-weight: 600;
@@ -505,15 +505,15 @@ h1 {
 .summary-text strong { color: var(--teal); font-weight: 600; }
 
 /* ===== Toggle pair ===== */
-.toggle-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.toggle-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 
 .toggle-cell {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  height: 38px;
-  padding: 0 8px 0 11px;
+  height: 33px;
+  padding: 0 7px 0 11px;
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.16);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -522,6 +522,8 @@ h1 {
 }
 
 .toggle-cell:hover { background: rgba(255, 255, 255, 0.04); }
+
+.toggle-cell .row-label { white-space: nowrap; }
 
 /* ===== Empty state ===== */
 .empty {
