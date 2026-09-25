@@ -18,6 +18,7 @@ const APPLY_DELAY_MS = 350;
 const $ = (id) => document.getElementById(id);
 
 const el = {
+  version: $("version"),
   livePill: $("livePill"),
   livePillText: $("livePillText"),
   emptyState: $("emptyState"),
@@ -455,6 +456,7 @@ function bindEvents() {
 // ===== Init =====
 async function init() {
   bindEvents();
+  el.version.textContent = `v${chrome.runtime.getManifest().version.replace(/\.0$/, "")}`;
 
   const [[tab], status] = await Promise.all([
     chrome.tabs.query({ active: true, currentWindow: true }),

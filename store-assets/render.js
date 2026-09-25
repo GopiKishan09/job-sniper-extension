@@ -22,7 +22,7 @@ const DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'job-sniper-shots-'));
 const STUB = () => {
   if (!location.href.includes('popup.html')) return;
   window.chrome = {
-    runtime: { sendMessage: (m, cb) => cb({ ok: true, status: { running: true, interval: 0.5, targetTabId: 1 } }) },
+    runtime: { getManifest: () => ({ version: '1.2.0' }), sendMessage: (m, cb) => cb({ ok: true, status: { running: true, interval: 0.5, targetTabId: 1 } }) },
     storage: { local: { get: async () => ({ hidePromoted: true, hideViewed: true }), set: async () => {} } },
     tabs: {
       query: async () => [{ id: 1, url: 'https://www.linkedin.com/jobs/search/?f_TPR=r600&f_WT=2,3&f_E=2,3&f_AL=true&sortBy=DD' }],
